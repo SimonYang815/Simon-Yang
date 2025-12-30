@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>英语听写助手 (译林版 4A)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0fdf4; /* Green-50 */
+        }
+        .btn-primary {
+            @apply bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition duration-200 ease-in-out transform hover:-translate-y-1 flex items-center justify-center gap-2;
+        }
+        .btn-secondary {
+            @apply bg-white hover:bg-gray-100 text-gray-800 font-semibold py-2 px-4 border border-gray-400 rounded shadow transition duration-200;
+        }
+        .btn-danger {
+            @apply bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded shadow transition duration-200;
+        }
+        .card {
+            @apply bg-white rounded-xl shadow-md overflow-hidden p-6 border border-gray-100;
+        }
+        .progress-bar-fill {
+            transition: width 0.5s ease-in-out;
+        }
+        /* Pulse animation for the active playing icon */
+        @keyframes pulse-ring {
+            0% { transform: scale(0.8); opacity: 0.5; }
+            100% { transform: scale(1.2); opacity: 0; }
+        }
+        .playing-indicator::after {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background-color: #16a34a;
+            animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+            z-index: -1;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+
+    <div class="max-w-md w-full space-y-6">
+        
+        <!-- Header -->
+        <div class="text-center space-y-2">
+            <h1 class="text-3xl font-extrabold text-green-800 tracking-tight">
+                <i class="fas fa-headphones-alt mr-2"></i>英语听写助手
+            </h1>
+            <p class="text-green-600 text-sm">译林版四年级上册 Unit 1-3</p>
+        </div>
+
+        <!-- Settings Card -->
+        <div class="card space-y-4">
+            <div class="flex justify-between items-center">
+                <h2 class="text-lg font-semibold text-gray-700">听写设置</h2>
+                <div class="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">随机抽50词</div>
+            </div>
+            
+            <div class="flex flex-col gap-3">
+                <label class="flex items-center space-x-3 cursor-pointer p-2 rounded hover:bg-gray-50 transition">
+                    <input type="radio" name="mode" value="en" checked class="form-radio text-green-600 h-5 w-5">
+                    <div>
+                        <span class="font-medium text-gray-800">读英文 (美式)</span>
+                        <p class="text-xs text-gray-500">报单词，默写中文意思</p>
+                    </div>
+                </label>
+                <label class="flex items-center space-x-3 cursor-pointer p-2 rounded hover:bg-gray-50 transition">
+                    <input type="radio" name="mode" value="zh" class="form-radio text-green-600 h-5 w-5">
+                    <div>
+                        <span class="font-medium text-gray-800">读中文 (普通话)</span>
+                        <p class="text-xs text-gray-500">报意思，默写英文单词</p>
+                    </div>
+                </label>
+                <label class="flex items-center space-x-3 cursor-pointer p-2 rounded hover:bg-gray-50 transition bg-green-50 border border-green-100">
+                    <input type="radio" name="mode" value="mixed" class="form-radio text-green-600 h-5 w-5">
+                    <div>
+                        <span class="font-medium text-green-800">混合模式 (穿插)</span>
+                        <p class="text-xs text-green-600">随机读英文或中文，听到什么写另一种</p>
+                    </div>
+                </label>
+            </div>
+            <!-- Debug Info for Voices -->
+            <div id="voiceStatus" class="text-xs text-orange-500 hidden">
+                正在加载语音库...
+            </div>
+        </div>
+
+        <!-- Control Panel -->
+        <div id="controlPanel" class="grid grid-cols-1 gap-4">
+            <button id="startBtn" class="btn-primary w-full text-lg">
+                <i class="fas fa-play"></i> 开始新听写
+            </button>
+            
+            <div id="activeControls" class="hidden grid grid-cols-2 gap-3">
+                <button id="pauseBtn" class="btn-secondary flex items-center justify-center gap-2">
+                    <i class="fas fa-pause"></i> 暂停
+                </button>
+                <button id="stopBtn" class="btn-danger flex items-center justify-center gap-2">
+                    <i class="fas fa-stop"></i> 结束
+                </button>
+            </div>
+        </div>
+
+        <!-- Playing Status -->
+        <div id="statusArea" class="hidden card bg-green-50 border-green-200 text-center space-y-4 relative">
+            <div class="absolute top-2 right-2">
+                <div id="playingIcon" class="hidden relative w-3 h-3 bg-green-600 rounded-full playing-indicator"></div>
+            </div>
+
+            <div class="space-y-1">
+                <p class="text-gray-500 text-sm uppercase tracking-wide">Current Progress</p>
+                <p id="progressText" class="text-4xl font-bold text-green-700">1 / 50</p>
+            </div>
+
+            <!-- Progress Bar -->
+            <div class="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-300">
+                <div id="progressBar" class="bg-green-600 h-2.5 rounded-full progress-bar-fill" style="width: 0%"></div>
+            </div>
+
+            <div class="pt-2 text-gray-600 min-h-[1.5rem]" id="statusMessage">
+                准备开始...
+            </div>
+        </div>
+
+        <!-- History/Word List (Initially Hidden) -->
+        <div class="text-center">
+            <button id="toggleListBtn" class="text-sm text-green-600 hover:text-green-800 underline">
+                查看本次词汇表 (听写后对答案)
+            </button>
+        </div>
+
+        <div id="wordListArea" class="hidden card max-h-60 overflow-y-auto">
+            <table class="w-full text-left text-sm">
+                <thead class="bg-gray-50 text-gray-600 font-semibold">
+                    <tr>
+                        <th class="p-2">No.</th>
+                        <th class="p-2">English</th>
+                        <th class="p-2">中文</th>
+                    </tr>
+                </thead>
+                <tbody id="wordListBody" class="divide-y divide-gray-100">
+                    <!-- Populated by JS -->
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+
+    <!-- Data Source -->
+    <script>
+        // Extracted from the user's PDF
+        const fullVocabulary = [
+            // Unit 1
+            { en: "Maths", zh: "数学" },
+            { en: "Chinese", zh: "语文；中国的" },
+            { en: "PE", zh: "体育" },
+            { en: "timetable", zh: "课程表" },
+            { en: "English", zh: "英语" },
+            { en: "Science", zh: "科学" },
+            { en: "mouse", zh: "鼠标；老鼠" },
+            { en: "mice", zh: "老鼠(复数)" },
+            { en: "interesting", zh: "有趣的" },
+            { en: "Art", zh: "美术" },
+            { en: "subject", zh: "学科" },
+            { en: "read", zh: "阅读" },
+            { en: "number", zh: "数字" },
+            { en: "Music", zh: "音乐" },
+            { en: "best", zh: "最" },
+            { en: "all", zh: "全部" },
+            { en: "IT", zh: "信息科技" },
+            { en: "also", zh: "也" },
+            { en: "playground", zh: "操场" },
+            { en: "story", zh: "故事" },
+            { en: "culture", zh: "文化" },
+            { en: "new", zh: "新的" },
+            { en: "go to the playground", zh: "去操场" },
+            { en: "learn about", zh: "学习" },
+            { en: "work hard", zh: "努力学习" },
+            { en: "make me smart", zh: "使我变聪明" },
+            { en: "all the subjects", zh: "所有的学科" },
+            { en: "welcome back to", zh: "欢迎回到" },
+            { en: "want to learn about", zh: "想学" },
+            
+            // Unit 2
+            { en: "day", zh: "一天" },
+            { en: "wash", zh: "洗" },
+            { en: "face", zh: "脸" },
+            { en: "have", zh: "吃；喝；有" },
+            { en: "early", zh: "早" },
+            { en: "thirty", zh: "三十" },
+            { en: "first", zh: "首先；第一" },
+            { en: "twenty", zh: "二十" },
+            { en: "class", zh: "课" },
+            { en: "eleven", zh: "十一" },
+            { en: "sport", zh: "体育运动" },
+            { en: "fifteen", zh: "十五" },
+            { en: "dinner", zh: "正餐；晚餐" },
+            { en: "breakfast", zh: "早餐" },
+            { en: "lunch", zh: "午餐" },
+            { en: "bed", zh: "床" },
+            { en: "o'clock", zh: "点钟" },
+            { en: "get up", zh: "起床" },
+            { en: "wash one's face", zh: "洗脸" },
+            { en: "hurry up", zh: "快点" },
+            { en: "have lessons", zh: "上课" },
+            { en: "go to bed", zh: "上床睡觉" },
+            { en: "it's time to", zh: "到做某事的时间了" },
+            { en: "have lunch", zh: "吃午餐" },
+            { en: "make a clock", zh: "制作一个时钟" },
+
+            // Unit 3
+            { en: "week", zh: "周；星期" },
+            { en: "Wednesday", zh: "星期三" },
+            { en: "Thursday", zh: "星期四" },
+            { en: "Sunday", zh: "星期天" },
+            { en: "Monday", zh: "星期一" },
+            { en: "Tuesday", zh: "星期二" },
+            { en: "Friday", zh: "星期五" },
+            { en: "Saturday", zh: "星期六" },
+            { en: "up", zh: "起床；向上" },
+            { en: "free", zh: "空闲的" },
+            { en: "when", zh: "什么时候" },
+            { en: "today", zh: "今天" },
+            { en: "cinema", zh: "电影院" },
+            { en: "dancing", zh: "跳舞" },
+            { en: "dog", zh: "狗" },
+            { en: "every", zh: "每个" },
+            { en: "at", zh: "在" },
+            { en: "walk", zh: "走；遛" },
+            { en: "tomorrow", zh: "明天" },
+            { en: "lesson", zh: "一节课" },
+            { en: "so", zh: "这么；那么" },
+            { en: "make a schedule", zh: "制定一个计划表" },
+            { en: "walk my dog", zh: "遛我的狗" },
+            { en: "be late for school", zh: "上学迟到" },
+            { en: "go to the cinema", zh: "去电影院" },
+            { en: "after school", zh: "放学后" },
+            { en: "on Saturday", zh: "在星期六" }
+        ];
+
+        // State variables
+        let currentList = [];
+        let currentIndex = 0;
+        let repeatCount = 0;
+        let isPaused = false;
+        let isPlaying = false;
+        let dictationMode = 'en'; // 'en', 'zh', or 'mixed'
+        let timeoutIds = [];
+        let synth = window.speechSynthesis;
+        let voices = [];
+        
+        let currentUtterance = null;
+
+        // Constants
+        const TOTAL_ITEMS = 50;
+        const REPEATS = 3;
+        const INTERVAL_REPEAT = 1000; // 1s
+        const INTERVAL_NEXT = 2000;   // 2s
+
+        // DOM Elements
+        const startBtn = document.getElementById('startBtn');
+        const pauseBtn = document.getElementById('pauseBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const activeControls = document.getElementById('activeControls');
+        const statusArea = document.getElementById('statusArea');
+        const progressText = document.getElementById('progressText');
+        const progressBar = document.getElementById('progressBar');
+        const statusMessage = document.getElementById('statusMessage');
+        const playingIcon = document.getElementById('playingIcon');
+        const wordListArea = document.getElementById('wordListArea');
+        const wordListBody = document.getElementById('wordListBody');
+        const toggleListBtn = document.getElementById('toggleListBtn');
+        const voiceStatus = document.getElementById('voiceStatus');
+
+        // Initialization
+        startBtn.addEventListener('click', startDictation);
+        stopBtn.addEventListener('click', stopDictation);
+        pauseBtn.addEventListener('click', togglePause);
+        toggleListBtn.addEventListener('click', () => {
+            wordListArea.classList.toggle('hidden');
+        });
+
+        // Voice Loading Logic
+        function loadVoices() {
+            voices = synth.getVoices();
+            console.log("Loaded voices:", voices.length);
+            if (voices.length > 0) {
+                // Check if we have chinese support
+                const zhVoice = voices.find(v => v.lang.includes('zh') || v.lang.includes('CN'));
+                if(!zhVoice) {
+                    voiceStatus.innerText = "警告：未检测到中文语音包，读中文可能无声";
+                    voiceStatus.classList.remove('hidden');
+                } else {
+                    voiceStatus.classList.add('hidden');
+                }
+            }
+        }
+
+        if (speechSynthesis.onvoiceschanged !== undefined) {
+            speechSynthesis.onvoiceschanged = loadVoices;
+        }
+        loadVoices();
+        setTimeout(loadVoices, 500);
+
+        // Helper to find best voice
+        function getBestVoice(lang) {
+            if (voices.length === 0) return null;
+
+            let bestVoice = null;
+
+            if (lang === 'en') {
+                // Priority 1: en-US
+                const usVoices = voices.filter(v => v.lang === 'en-US' || v.lang.includes('en-US'));
+                
+                // Try to pick a specific high-quality one if known, otherwise first US one
+                if (usVoices.length > 0) {
+                    // Prefer Google or Microsoft voices if available as they are usually standard
+                    bestVoice = usVoices.find(v => v.name.includes('Google') || v.name.includes('Microsoft')) || usVoices[0];
+                } else {
+                    // Fallback to any English
+                    bestVoice = voices.find(v => v.lang.startsWith('en'));
+                }
+            } else if (lang === 'zh') {
+                // Priority 1: zh-CN (Mainland China / Mandarin)
+                const cnVoices = voices.filter(v => v.lang === 'zh-CN' || v.lang.includes('zh-CN'));
+                
+                if (cnVoices.length > 0) {
+                    // Prefer Google or Microsoft
+                    bestVoice = cnVoices.find(v => v.name.includes('Google') || v.name.includes('Microsoft')) || cnVoices[0];
+                } else {
+                    // Fallback: Check for just 'zh' but avoid HK/TW if possible unless it's the only option
+                    bestVoice = voices.find(v => v.lang === 'zh');
+                }
+            }
+
+            return bestVoice;
+        }
+
+        function getRandomItems(arr, n) {
+            const shuffled = [...arr].sort(() => 0.5 - Math.random());
+            return shuffled.slice(0, n);
+        }
+
+        function populateWordList(items) {
+            wordListBody.innerHTML = '';
+            items.forEach((item, index) => {
+                const tr = document.createElement('tr');
+                tr.className = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+                tr.innerHTML = `
+                    <td class="p-2 text-gray-500">${index + 1}</td>
+                    <td class="p-2 font-medium">${item.en}</td>
+                    <td class="p-2">${item.zh}</td>
+                `;
+                wordListBody.appendChild(tr);
+            });
+        }
+
+        function startDictation() {
+            if(voices.length === 0) loadVoices();
+
+            // Reset State
+            stopDictation(false); 
+            
+            // Get Mode
+            const modeRadios = document.getElementsByName('mode');
+            for(const radio of modeRadios) {
+                if(radio.checked) dictationMode = radio.value;
+            }
+
+            // Prepare List
+            const count = Math.min(TOTAL_ITEMS, fullVocabulary.length);
+            currentList = getRandomItems(fullVocabulary, count);
+            populateWordList(currentList);
+
+            // Update UI
+            startBtn.classList.add('hidden');
+            activeControls.classList.remove('hidden');
+            statusArea.classList.remove('hidden');
+            wordListArea.classList.add('hidden'); 
+            toggleListBtn.classList.remove('hidden');
+            
+            currentIndex = 0;
+            isPlaying = true;
+            isPaused = false;
+            
+            processQueue();
+        }
+
+        function updateProgress() {
+            progressText.innerText = `${currentIndex + 1} / ${currentList.length}`;
+            const pct = ((currentIndex) / currentList.length) * 100;
+            progressBar.style.width = `${pct}%`;
+        }
+
+        function speakText(text, lang, callback) {
+            if (!isPlaying) return;
+            
+            synth.cancel();
+
+            currentUtterance = new SpeechSynthesisUtterance(text);
+            
+            // Standardize Lang Code
+            const langCode = lang === 'en' ? 'en-US' : 'zh-CN';
+            currentUtterance.lang = langCode;
+            currentUtterance.rate = 0.9;
+
+            // Voice selection logic using helper
+            const targetVoice = getBestVoice(lang);
+
+            if (targetVoice) {
+                currentUtterance.voice = targetVoice;
+                // console.log(`Using voice: ${targetVoice.name} for ${lang}`);
+            }
+
+            currentUtterance.onend = () => {
+                currentUtterance = null; // Clean up
+                if(callback) callback();
+            };
+
+            currentUtterance.onerror = (e) => {
+                console.error('Speech error details:', e);
+                currentUtterance = null; // Clean up
+                if(callback) callback(); 
+            };
+
+            synth.speak(currentUtterance);
+            playingIcon.classList.remove('hidden');
+        }
+
+        function processQueue() {
+            if (!isPlaying) return;
+            if (isPaused) return;
+
+            if (currentIndex >= currentList.length) {
+                finishDictation();
+                return;
+            }
+
+            const item = currentList[currentIndex];
+            updateProgress();
+            
+            let currentLang = dictationMode;
+            if (dictationMode === 'mixed') {
+                currentLang = Math.random() < 0.5 ? 'en' : 'zh';
+            }
+
+            const textToRead = currentLang === 'en' ? item.en : item.zh;
+            
+            let readCount = 0;
+
+            const readLoop = () => {
+                if(!isPlaying) return;
+                if(isPaused) return;
+
+                const modeText = currentLang === 'en' ? "英文" : "中文";
+                statusMessage.innerText = `[${modeText}] 正在读第 ${readCount + 1} 遍...`;
+                
+                speakText(textToRead, currentLang, () => {
+                    playingIcon.classList.add('hidden');
+                    readCount++;
+                    
+                    if (readCount < REPEATS) {
+                        const id = setTimeout(readLoop, INTERVAL_REPEAT);
+                        timeoutIds.push(id);
+                    } else {
+                        statusMessage.innerText = "等待下一个...";
+                        const id = setTimeout(() => {
+                            currentIndex++;
+                            processQueue();
+                        }, INTERVAL_NEXT);
+                        timeoutIds.push(id);
+                    }
+                });
+            };
+
+            readLoop();
+        }
+
+        function togglePause() {
+            if (!isPlaying) return;
+            
+            if (isPaused) {
+                // Resume
+                isPaused = false;
+                pauseBtn.innerHTML = '<i class="fas fa-pause"></i> 暂停';
+                pauseBtn.classList.remove('bg-yellow-100', 'text-yellow-800');
+                pauseBtn.classList.add('bg-white', 'text-gray-800');
+                synth.resume();
+                processQueue(); 
+            } else {
+                // Pause
+                isPaused = true;
+                pauseBtn.innerHTML = '<i class="fas fa-play"></i> 继续';
+                pauseBtn.classList.remove('bg-white', 'text-gray-800');
+                pauseBtn.classList.add('bg-yellow-100', 'text-yellow-800');
+                synth.cancel(); 
+                clearAllTimeouts();
+                playingIcon.classList.add('hidden');
+                statusMessage.innerText = "已暂停";
+            }
+        }
+
+        function stopDictation(resetUI = true) {
+            isPlaying = false;
+            isPaused = false;
+            synth.cancel();
+            clearAllTimeouts();
+            playingIcon.classList.add('hidden');
+
+            if (resetUI) {
+                startBtn.classList.remove('hidden');
+                activeControls.classList.add('hidden');
+                statusArea.classList.add('hidden');
+                statusMessage.innerText = "准备开始...";
+                pauseBtn.innerHTML = '<i class="fas fa-pause"></i> 暂停';
+                wordListArea.classList.remove('hidden');
+            }
+        }
+
+        function finishDictation() {
+            stopDictation(true);
+            statusMessage.innerText = "听写完成！";
+            alert("听写完成！请检查你的答案。");
+            wordListArea.classList.remove('hidden');
+            wordListArea.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function clearAllTimeouts() {
+            timeoutIds.forEach(id => clearTimeout(id));
+            timeoutIds = [];
+        }
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && isPlaying && !isPaused) {
+                togglePause();
+            }
+        });
+
+    </script>
+</body>
+</html>
